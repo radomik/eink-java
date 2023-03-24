@@ -1,31 +1,32 @@
 package radomik.com.github.dto;
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 public class RedrawDto implements Serializable {
     private static final long serialVersionUID = -8812078606994906219L;
 
-    private int minY;
-    private int maxY;
+    private short minY;
+    private short maxY;
     private byte[] pixels;
+    private List<BarInfoDto> bars;
+    private List<SetInfoDto> sets;
 
-    private BarInfoDto[] bars;
-    private SetInfoDto[] sets;
-
-    public int getMinY() {
+    public short getMinY() {
         return minY;
     }
 
-    public void setMinY(int minY) {
+    public void setMinY(short minY) {
         this.minY = minY;
     }
 
-    public int getMaxY() {
+    public short getMaxY() {
         return maxY;
     }
 
-    public void setMaxY(int maxY) {
+    public void setMaxY(short maxY) {
         this.maxY = maxY;
     }
 
@@ -40,25 +41,25 @@ public class RedrawDto implements Serializable {
         this.pixels = pixels;
     }
 
-    public BarInfoDto[] getBars() {
+    public List<BarInfoDto> getBars() {
         if (Objects.isNull(bars)) {
-            bars = new BarInfoDto[0];
+            bars = new ArrayList<>();
         }
         return bars;
     }
 
-    public void setBars(BarInfoDto[] bars) {
+    public void setBars(List<BarInfoDto> bars) {
         this.bars = bars;
     }
 
-    public SetInfoDto[] getSets() {
+    public List<SetInfoDto> getSets() {
         if (Objects.isNull(sets)) {
-            sets = new SetInfoDto[0];
+            sets = new ArrayList<>();
         }
         return sets;
     }
 
-    public void setSets(SetInfoDto[] sets) {
+    public void setSets(List<SetInfoDto> sets) {
         this.sets = sets;
     }
 
@@ -68,8 +69,8 @@ public class RedrawDto implements Serializable {
                 "minY=" + minY +
                 ", maxY=" + maxY +
                 ", pixels.length=" + getPixels().length +
-                ", bars.length=" + getBars().length +
-                ", sets.length=" + getSets().length +
+                ", bars.length=" + getBars().size() +
+                ", sets.length=" + getSets().size() +
                 '}';
     }
 }

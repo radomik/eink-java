@@ -1,18 +1,26 @@
 package radomik.com.github;
 
+import nu.pattern.OpenCV;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
-import org.opencv.highgui.HighGui;
+import org.opencv.core.MatOfPoint;
+import org.opencv.core.Rect;
+import org.opencv.imgproc.Imgproc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import radomik.com.github.dto.RedrawDto;
+import radomik.com.github.dto.SetInfoDto;
 
-import java.awt.*;
+import java.awt.AWTException;
+import java.awt.Rectangle;
+import java.awt.Robot;
 import java.awt.image.BufferedImage;
 import java.awt.image.ColorModel;
 import java.awt.image.DataBufferInt;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class X11 {
 
@@ -26,13 +34,14 @@ public class X11 {
 
     private byte[] prevPixels;
     private byte[] nextPixels;
+
+    private final byte[] nextPixelsCv;
     private short minY, maxY;
 
     private Mat prevImg;
-    private Mat nextImg;
 
     static {
-        System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
+        OpenCV.loadLocally();
     }
 
     public X11(ClientCommonArgs args, Device device) {
@@ -45,8 +54,8 @@ public class X11 {
 
         prevPixels = new byte[args.getScreenWidth() * args.getScreenHeight() / args.getBppMode().getPixelCountInByte()];
         nextPixels = new byte[prevPixels.length];
-        redrawDto.setMinY(0);
-        redrawDto.setMaxY(args.getScreenHeight() - 1);
+        nextPixelsCv = new byte[args.getScreenWidth() * args.getScreenHeight()];
+        redrawDto.setSets(new ArrayList<>(args.getSetSize()));
     }
 
     public void redraw() throws IOException {
@@ -58,15 +67,38 @@ public class X11 {
             return;
         }
 
-        nextImg = new Mat(screenshotArea.height, screenshotArea.width, CvType.CV_8UC1);
-        nextImg.put(0, 0, nextPixels);
+        redrawDto.getSets().clear();
+
+        Mat nextImg = new Mat(screenshotArea.height, screenshotArea.width, CvType.CV_8UC1);
+        nextImg.put(0, 0, nextPixelsCv);
         if (prevImg != null) { // run opencv set extraction
             Mat diffImg = new Mat(screenshotArea.height, screenshotArea.width, CvType.CV_8UC1);
             Core.absdiff(prevImg, nextImg, diffImg);
-            HighGui.imshow("prevImg", prevImg);
-            HighGui.imshow("nextImg", nextImg);
-            HighGui.imshow("diffImg", diffImg);
-            HighGui.waitKey();
+
+            List<MatOfPoint> contours = new ArrayList<>();
+
+            Imgproc.findContours(diffImg, contours, new Mat(), Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
+
+            if (contours.size() <= args.getSetSize()) {
+                for (int i = 0; i < contours.size(); i++) {
+                    Rect rect = Imgproc.boundingRect(contours.get(i));
+                    SetInfoDto set = new SetInfoDto();
+                    redrawDto.getSets().add(set);
+                    set.getMin().setX((short) rect.x);
+                    set.getMin().setY((short) rect.y);
+                    set.getMax().setX((short) (rect.x + rect.width - 1));
+                    set.getMax().setY((short) (rect.y + rect.height - 1));
+                    System.err.printf("Set[%d] min(%d,%d) max(%d,%d)\n", i,
+                            set.getMin().getX(), set.getMin().getY(),
+                            set.getMax().getX(), set.getMax().getY());
+                }
+            } else {
+                System.err.printf("Too many sets: %d\n", contours.size());
+//                HighGui.imshow("prevImg", prevImg);
+//                HighGui.imshow("nextImg", nextImg);
+//                HighGui.imshow("diffImg " + contours.size(), diffImg);
+//                HighGui.waitKey();
+            }
         }
 
         prevImg = nextImg;
@@ -79,7 +111,6 @@ public class X11 {
         nextPixels = prevPixels;
         prevPixels = temp;
 
-        //todo: add bars/sets redraw and limit miny/maxy
         try {
             device.redraw(redrawDto);
         } catch (IOException ex) {
@@ -91,6 +122,7 @@ public class X11 {
         int[] sourcePixels = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
 
         int targetOffset = 0;
+        int targetCvOffset = 0;
         int sourceOffset = 0;
         short x = 0;
         short y = 0;
@@ -100,9 +132,11 @@ public class X11 {
         if (args.getBppMode() == BppMode.BIT_4) {
             while (targetOffset < nextPixels.length) {
                 int msbPixel = getGrayByte(sourcePixels, sourceOffset, image.getColorModel());
+                nextPixelsCv[targetCvOffset++] = (byte) (msbPixel & 0xF0);
                 sourceOffset++;
 
                 int lsbPixel = getGrayByte(sourcePixels, sourceOffset, image.getColorModel());
+                nextPixelsCv[targetCvOffset++] = (byte) (lsbPixel & 0xF0);
                 sourceOffset++;
 
                 byte grey = (byte) ((msbPixel & 0xF0) | (lsbPixel >> 4));
@@ -119,10 +153,10 @@ public class X11 {
                 }
 
                 targetOffset++;
-                y += 2;
-                if (y >= screenshotArea.width) {
-                    y = 0;
-                    x++;
+                x += 2;
+                if (x >= screenshotArea.width) {
+                    x = 0;
+                    y++;
                 }
             }
             return anyPixelChanged;
@@ -135,6 +169,7 @@ public class X11 {
                 boolean currentPixelChanged = grey != prevPixels[targetOffset];
                 anyPixelChanged |= currentPixelChanged;
                 nextPixels[targetOffset] = grey;
+                nextPixelsCv[targetCvOffset++] = grey;
 
                 if (currentPixelChanged && minY < 0) {
                     minY = y;
@@ -144,10 +179,10 @@ public class X11 {
                 }
 
                 targetOffset++;
-                y++;
-                if (y >= screenshotArea.width) {
-                    y = 0;
-                    x++;
+                x++;
+                if (x >= screenshotArea.width) {
+                    x = 0;
+                    y++;
                 }
             }
             return anyPixelChanged;

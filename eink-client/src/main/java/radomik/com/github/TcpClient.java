@@ -4,7 +4,6 @@ import radomik.com.github.dto.BarInfoDto;
 import radomik.com.github.dto.RedrawDto;
 import radomik.com.github.dto.SetInfoDto;
 
-import java.io.BufferedOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.InetAddress;
@@ -26,7 +25,7 @@ public class TcpClient implements Device {
         try (Socket socket = new Socket(serverHost, serverPort)) {
             try (DataOutputStream stream = new DataOutputStream(socket.getOutputStream())) {
                 System.err.printf("Send    : px_bytesize=%d, bar,set_count=%d,%d, min,maxy=%d,%d, %02X,%02X,%02X,%02X,%02X,...,%02X,%02X,%02X,%02X,%02X\n",
-                        value.getPixels().length, value.getBars().length, value.getSets().length,
+                        value.getPixels().length, value.getBars().size(), value.getSets().size(),
                         value.getMinY(), value.getMaxY(),
                         value.getPixels()[0],
                         value.getPixels()[1],
@@ -40,23 +39,22 @@ public class TcpClient implements Device {
                         value.getPixels()[value.getPixels().length-2],
                         value.getPixels()[value.getPixels().length-1]
                 );
-                stream.writeShort(Short.reverseBytes((short)value.getMinY()));
-                stream.writeShort(Short.reverseBytes((short)value.getMaxY()));
+                stream.writeShort(Short.reverseBytes(value.getMinY()));
+                stream.writeShort(Short.reverseBytes(value.getMaxY()));
                 stream.writeInt(Integer.reverseBytes(value.getPixels().length));
-                stream.writeShort(Short.reverseBytes((short)value.getBars().length));
-                stream.writeShort(Short.reverseBytes((short)value.getSets().length));
+                stream.writeShort(Short.reverseBytes((short) value.getBars().size()));
+                stream.writeShort(Short.reverseBytes((short) value.getSets().size()));
                 stream.write(value.getPixels());
                 for (BarInfoDto bar : value.getBars()) {
-                    stream.writeShort(bar.getY0());
-                    stream.writeShort(bar.getHeight());
+                    stream.writeShort(Short.reverseBytes(bar.getY0()));
+                    stream.writeShort(Short.reverseBytes(bar.getHeight()));
                 }
                 for (SetInfoDto set : value.getSets()) {
-                    stream.writeShort(set.getMin().getX());
-                    stream.writeShort(set.getMin().getY());
-                    stream.writeShort(set.getMax().getX());
-                    stream.writeShort(set.getMax().getY());
+                    stream.writeShort(Short.reverseBytes(set.getMin().getX()));
+                    stream.writeShort(Short.reverseBytes(set.getMin().getY()));
+                    stream.writeShort(Short.reverseBytes(set.getMax().getX()));
+                    stream.writeShort(Short.reverseBytes(set.getMax().getY()));
                 }
-
             }
         }
     }
